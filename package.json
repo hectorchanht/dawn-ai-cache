@@ -1,14 +1,14 @@
 {
   "dependencies": {},
-  "description": "KV-cached AI streaming + monthly budget guard for Dawn Studio apps. Zero deps, edge-safe (WebCrypto only).",
+  "description": "KV-cached AI streaming + period budget guard for Dawn Studio apps. Zero deps, edge-safe (WebCrypto only).",
   "devDependencies": {
     "typescript": "^5.6.0",
     "vitest": "^2.1.0"
   },
   "exports": {
     ".": {
-      "default": "./dist/index.js",
-      "types": "./dist/index.d.ts"
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
     }
   },
   "files": [
@@ -41,5 +41,5 @@
   },
   "type": "module",
   "types": "./dist/index.d.ts",
-  "version": "0.4.0"
+  "version": "0.5.0"
 }

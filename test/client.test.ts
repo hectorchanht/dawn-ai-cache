@@ -67,3 +67,36 @@ describe("streamPost", () => {
 		expect(gotInit.body).toBe(JSON.stringify({ a: 1 }));
 	});
 });
+
+describe("streamPost — method/headers options", () => {
+	it("sends a custom method and merged headers", async () => {
+		let gotInit: RequestInit = {};
+		vi.stubGlobal("fetch", async (_url: string, init: RequestInit) => {
+			gotInit = init;
+			return okResponse("ok");
+		});
+		await streamPost(
+			"https://x.test/api",
+			{ a: 1 },
+			() => {},
+			{ method: "PUT", headers: { Authorization: "Bearer tok" } },
+		);
+		expect(gotInit.method).toBe("PUT");
+		const h = gotInit.headers as Record<string, string>;
+		expect(h["Authorization"]).toBe("Bearer tok");
+		expect(h["Content-Type"]).toBe("application/json");
+	});
+
+	it("fetchInit.headers win over headers", async () => {
+		let gotInit: RequestInit = {};
+		vi.stubGlobal("fetch", async (_url: string, init: RequestInit) => {
+			gotInit = init;
+			return okResponse("ok");
+		});
+		await streamPost("https://x.test/api", {}, () => {}, {
+			headers: { "X-A": "opts" },
+			fetchInit: { headers: { "X-A": "init" } },
+		});
+		expect((gotInit.headers as Record<string, string>)["X-A"]).toBe("init");
+	});
+});

@@ -237,3 +237,56 @@ describe("teeTextStream", () => {
 		expect(() => stream.abort()).not.toThrow();
 	});
 });
+
+describe("prepareCachedStream — CacheOptions extras", () => {
+	it("hitHeaders override the default HIT headers", async () => {
+		const kv = memKv();
+		const key = await aiCacheKey(PARTS);
+		await kv.put(key, "cached text");
+		const r = await prepareCachedStream(kv, PARTS, () => fakeStream(["x"]), {
+			hitHeaders: { "Cache-Control": "public, max-age=60", "X-Custom": "yes" },
+		});
+		if (!("hit" in r)) throw new Error("expected hit");
+		expect(r.hit.headers.get("Cache-Control")).toBe("public, max-age=60");
+		expect(r.hit.headers.get("X-Custom")).toBe("yes");
+		expect(r.hit.headers.get("X-Cache")).toBe("HIT"); // untouched default survives
+	});
+
+	it("fires onCacheHit / onCacheMiss / onCacheWrite", async () => {
+		const events: string[] = [];
+		const kv = memKv();
+		// miss path
+		const r1 = await prepareCachedStream(kv, PARTS, () => fakeStream(["ab"]), {
+			onCacheMiss: (e) => events.push(`miss:${e.key}`),
+			onCacheWrite: (e) => events.push(`write:${e.key}:${e.bytes}`),
+		});
+		if (!("miss" in r1)) throw new Error("expected miss");
+		expect(events[0]).toBe(`miss:${r1.miss.cacheKey}`);
+		r1.miss.stream.on("text", () => {});
+		await r1.miss.stream.finalMessage();
+		const pending: Promise<unknown>[] = [];
+		r1.miss.armPersistence((p) => pending.push(p));
+		await Promise.all(pending);
+		expect(events[1]).toBe(`write:${r1.miss.cacheKey}:2`);
+		// hit path
+		const r2 = await prepareCachedStream(kv, PARTS, () => fakeStream(["x"]), {
+			onCacheHit: (e) => events.push(`hit:${e.key}:${e.bytes}`),
+		});
+		if (!("hit" in r2)) throw new Error("expected hit");
+		expect(events[2]).toBe(`hit:${r1.miss.cacheKey}:2`);
+	});
+
+	it("a throwing callback never breaks the response path", async () => {
+		const kv = memKv();
+		const key = await aiCacheKey(PARTS);
+		await kv.put(key, "cached");
+		const boom = () => {
+			throw new Error("user callback boom");
+		};
+		const r = await prepareCachedStream(kv, PARTS, () => fakeStream(["x"]), {
+			onCacheHit: boom,
+		});
+		if (!("hit" in r)) throw new Error("expected hit");
+		expect(await r.hit.text()).toBe("cached");
+	});
+});

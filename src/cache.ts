@@ -81,6 +81,19 @@ export interface CachedStream {
 	armPersistence: (waitUntil: ((p: Promise<unknown>) => void) | null) => void;
 }
 
+/** Info passed to cache lifecycle callbacks. */
+export interface CacheEvent {
+	key: string;
+	/** Response bytes (hit / write events only). */
+	bytes?: number;
+}
+
+const DEFAULT_HIT_HEADERS: Record<string, string> = {
+	"Content-Type": "text/plain; charset=utf-8",
+	"Cache-Control": "public, max-age=86400",
+	"X-Cache": "HIT",
+};
+
 export interface CacheOptions {
 	/** Cache key namespace; bump to invalidate. @default DEFAULT_CACHE_PREFIX */
 	prefix?: string;
@@ -93,6 +106,28 @@ export interface CacheOptions {
 	 * @default false
 	 */
 	forceRefresh?: boolean;
+	/**
+	 * Full header set for the HIT Response (merged over the defaults:
+	 * Content-Type text/plain, Cache-Control public max-age=86400, X-Cache: HIT).
+	 * Use to add e.g. CORS headers or change the max-age per route.
+	 */
+	hitHeaders?: Record<string, string>;
+	/** Called on a cache hit (never throws into the caller). */
+	onCacheHit?: (e: CacheEvent) => void;
+	/** Called on a cache miss, before makeStream runs (never throws into the caller). */
+	onCacheMiss?: (e: CacheEvent) => void;
+	/** Called after a successful KV write (never throws into the caller). */
+	onCacheWrite?: (e: CacheEvent) => void;
+}
+
+/** Fire a user callback without ever letting it break the response path. */
+function safeNotify(fn: ((e: CacheEvent) => void) | undefined, e: CacheEvent): void {
+	if (!fn) return;
+	try {
+		fn(e);
+	} catch {
+		/* user callback failure must not affect the response */
+	}
 }
 
 /**
@@ -120,13 +155,10 @@ export async function prepareCachedStream(
 		try {
 			const hit = await kv.get(key);
 			if (hit) {
+				safeNotify(opts.onCacheHit, { key, bytes: hit.length });
 				return {
 					hit: new Response(hit, {
-						headers: {
-							"Content-Type": "text/plain; charset=utf-8",
-							"Cache-Control": "public, max-age=86400",
-							"X-Cache": "HIT",
-						},
+						headers: { ...DEFAULT_HIT_HEADERS, ...opts.hitHeaders },
 					}),
 				};
 			}
@@ -134,6 +166,7 @@ export async function prepareCachedStream(
 			/* read failure → treat as miss */
 		}
 	}
+	safeNotify(opts.onCacheMiss, { key });
 	const { stream, acc } = teeTextStream(makeStream());
 	return {
 		miss: {
@@ -147,6 +180,7 @@ export async function prepareCachedStream(
 							if (acc.text.trim()) {
 								try {
 									await kv.put(key, acc.text, { expirationTtl: ttlSeconds });
+									safeNotify(opts.onCacheWrite, { key, bytes: acc.text.length });
 								} catch {
 									/* write failure must not affect the response already sent */
 								}

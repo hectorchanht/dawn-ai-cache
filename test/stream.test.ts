@@ -83,3 +83,30 @@ describe("streamToPrimedResponse", () => {
 		expect(await res.text()).toBe("");
 	});
 });
+
+describe("streamToResponse / streamToPrimedResponse — options", () => {
+	it("streamToResponse merges custom headers and status", async () => {
+		const d = deferredStream();
+		const res = streamToResponse(d.stream, {
+			headers: { "X-Request-Id": "abc", "Cache-Control": "public, max-age=5" },
+			status: 201,
+		});
+		d.done();
+		expect(res.status).toBe(201);
+		expect(res.headers.get("X-Request-Id")).toBe("abc");
+		expect(res.headers.get("Cache-Control")).toBe("public, max-age=5");
+		expect(res.headers.get("X-Accel-Buffering")).toBe("no"); // untouched default
+	});
+
+	it("streamToPrimedResponse accepts the same options", async () => {
+		const d = deferredStream();
+		const p = streamToPrimedResponse(d.stream, 20_000, {
+			headers: { "X-Custom": "1" },
+		});
+		d.emit("x");
+		const res = await p;
+		d.done();
+		expect(res.headers.get("X-Custom")).toBe("1");
+		expect(await res.text()).toBe("x");
+	});
+});

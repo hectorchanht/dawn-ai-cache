@@ -16,14 +16,31 @@
 
 import type { TextStream } from "./cache.js";
 
-const STREAM_HEADERS = {
+const STREAM_HEADERS: Record<string, string> = {
 	"Content-Type": "text/plain; charset=utf-8",
 	"Cache-Control": "no-store",
 	"X-Accel-Buffering": "no",
 };
 
+export interface StreamResponseOptions {
+	/**
+	 * Extra/override headers, merged over the defaults
+	 * (Content-Type text/plain, Cache-Control no-store, X-Accel-Buffering no).
+	 */
+	headers?: Record<string, string>;
+	/** HTTP status for the streaming response. @default 200 */
+	status?: number;
+}
+
+function streamInit(opts: StreamResponseOptions = {}): ResponseInit {
+	return {
+		status: opts.status ?? 200,
+		headers: { ...STREAM_HEADERS, ...opts.headers },
+	};
+}
+
 /** Turn a TextStream into a plain-text streaming HTTP Response for progressive rendering. */
-export function streamToResponse(stream: TextStream): Response {
+export function streamToResponse(stream: TextStream, opts: StreamResponseOptions = {}): Response {
 	const encoder = new TextEncoder();
 	const body = new ReadableStream<Uint8Array>({
 		start(controller) {
@@ -38,7 +55,7 @@ export function streamToResponse(stream: TextStream): Response {
 			stream.abort();
 		},
 	});
-	return new Response(body, { headers: STREAM_HEADERS });
+	return new Response(body, streamInit(opts));
 }
 
 /**
@@ -52,6 +69,7 @@ export function streamToResponse(stream: TextStream): Response {
 export async function streamToPrimedResponse(
 	stream: TextStream,
 	timeoutMs = 20_000,
+	opts: StreamResponseOptions = {},
 ): Promise<Response> {
 	const first = await waitForFirstChunk(stream, timeoutMs);
 	const encoder = new TextEncoder();
@@ -70,7 +88,7 @@ export async function streamToPrimedResponse(
 			stream.abort();
 		},
 	});
-	return new Response(body, { headers: STREAM_HEADERS });
+	return new Response(body, streamInit(opts));
 }
 
 /** Wait for the stream's first text chunk; failures (incl. timeout) reject to the caller. */
