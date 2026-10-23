@@ -43,6 +43,19 @@ Rules baked in:
 - KV read failure → miss; write failure → swallowed; empty/failed generations → never cached. The cache never breaks a response.
 - Don't use this for chat / conversational calls (hit rate ≈ 0).
 
+### Deliberate re-run
+
+When the user explicitly hits regenerate / retry, they want a *different* result — not the cached one. Pass `forceRefresh: true` to skip the KV read; the fresh generation flows through the normal miss path and **overwrites** the cached entry:
+
+```ts
+const result = await prepareCachedStream(
+  env.AI_BUDGET_KV,
+  { provider: "workers-ai", promptHash, inputHash },
+  () => myProvider.textStream({ ... }),
+  { forceRefresh: true }, // user asked for a fresh take
+);
+```
+
 ### 2. Budget guard (`budget.ts`)
 
 Workers AI has no native monthly spending cap — this enforces one at the application layer. Every call checks the month-to-date (UTC) neuron total in KV before running, and refuses with `BudgetExceededError` at the cap. The error message carries the stable `AI_BUDGET_EXCEEDED:` marker (downstream classifiers map it → HTTP 429).

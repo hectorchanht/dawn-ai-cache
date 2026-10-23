@@ -86,6 +86,13 @@ export interface CacheOptions {
 	prefix?: string;
 	/** KV TTL seconds. @default DEFAULT_CACHE_TTL_SECONDS */
 	ttlSeconds?: number;
+	/**
+	 * Deliberate re-run: skip the KV read and force a fresh generation.
+	 * The new result overwrites the cached entry via the normal armPersistence flow.
+	 * Use when the user explicitly hits regenerate / retry.
+	 * @default false
+	 */
+	forceRefresh?: boolean;
 }
 
 /**
@@ -95,6 +102,10 @@ export interface CacheOptions {
  *
  * Never throws on KV faults: a failed read degrades to miss, a failed write is
  * swallowed — the response already went out.
+ *
+ * Pass `forceRefresh: true` when the user deliberately re-runs (regenerate /
+ * retry button): the KV read is skipped and the fresh result overwrites the
+ * cached entry.
  */
 export async function prepareCachedStream(
 	kv: KvLike | null,
@@ -105,7 +116,7 @@ export async function prepareCachedStream(
 	const prefix = opts.prefix ?? DEFAULT_CACHE_PREFIX;
 	const ttlSeconds = opts.ttlSeconds ?? DEFAULT_CACHE_TTL_SECONDS;
 	const key = await aiCacheKey(parts, prefix);
-	if (kv) {
+	if (kv && !opts.forceRefresh) {
 		try {
 			const hit = await kv.get(key);
 			if (hit) {

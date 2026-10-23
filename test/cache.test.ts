@@ -104,6 +104,48 @@ describe("prepareCachedStream — HIT", () => {
 	});
 });
 
+describe("prepareCachedStream — forceRefresh", () => {
+	it("skips the KV read and regenerates even when a cached value exists", async () => {
+		const kv = memKv();
+		const key = await aiCacheKey(PARTS);
+		await kv.put(key, "old cached");
+		let made = false;
+		const r = await prepareCachedStream(
+			kv,
+			PARTS,
+			() => {
+				made = true;
+				return fakeStream(["fresh"]);
+			},
+			{ forceRefresh: true },
+		);
+		expect(made).toBe(true);
+		if (!("miss" in r)) throw new Error("expected miss");
+		// the fresh result overwrites the old entry via the normal flow
+		// (consume the stream first — the tee accumulates on listener attach)
+		r.miss.stream.on("text", () => {});
+		await r.miss.stream.finalMessage();
+		const pending: Promise<unknown>[] = [];
+		r.miss.armPersistence((p) => pending.push(p));
+		await Promise.all(pending);
+		expect(kv.store.get(key)).toBe("fresh");
+	});
+
+	it("without forceRefresh the cached value wins (no regeneration)", async () => {
+		const kv = memKv();
+		const key = await aiCacheKey(PARTS);
+		await kv.put(key, "old cached");
+		let made = false;
+		const r = await prepareCachedStream(kv, PARTS, () => {
+			made = true;
+			return fakeStream(["fresh"]);
+		});
+		expect(made).toBe(false);
+		if (!("hit" in r)) throw new Error("expected hit");
+		expect(await r.hit.text()).toBe("old cached");
+	});
+});
+
 describe("prepareCachedStream — MISS + armPersistence", () => {
 	it("writes the full text on successful completion via waitUntil", async () => {
 		const kv = memKv();
