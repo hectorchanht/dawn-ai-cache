@@ -15,7 +15,7 @@ npm i @dawn-studio/ai-cache
 Deterministic AI generations (same input + same config → same response) are cached in KV, so repeated questions cost **zero**. Only complete, successful responses are ever written.
 
 ```ts
-import { prepareCachedStream } from "@dawn-studio/ai-cache";
+import { prepareCachedStream, streamToPrimedResponse } from "@dawn-studio/ai-cache";
 
 // In your route handler (Cloudflare Workers example):
 const result = await prepareCachedStream(
@@ -31,8 +31,8 @@ const result = await prepareCachedStream(
 
 if ("hit" in result) return result.hit; // Response with `X-Cache: HIT`
 
-// Miss: stream to the client, then arm the background write:
-const response = streamToResponse(result.miss.stream); // your streaming helper
+// Miss: wait for the first chunk (or failure) BEFORE returning headers, then stream:
+const response = await streamToPrimedResponse(result.miss.stream);
 result.miss.armPersistence((p) => ctx.waitUntil(p));   // writes on success only
 return response; // `X-Cache: MISS`
 ```
@@ -66,6 +66,8 @@ WebCrypto SHA-256 hex — the primitive behind cache keys and input hashes.
 | Export | Description |
 |---|---|
 | `prepareCachedStream(kv, parts, makeStream, opts?)` | HIT → `Response`; MISS → tee'd stream + `armPersistence`. Never throws on KV faults. |
+| `streamToPrimedResponse(stream, timeoutMs?)` | Waits for the first chunk (or failure) before returning the `Response`; replays the primed chunk so the body is complete. Provider failures surface as rejections — the caller returns a proper JSON error instead of a truncated stream. |
+| `streamToResponse(stream)` | Immediate streaming `Response` (no priming). |
 | `aiCacheKey(parts, prefix?)` | Stable cache key. |
 | `teeTextStream(inner)` | Fan-out wrapper; inner gets exactly one text listener. |
 | `checkBudget(kv, opts?, now?)` | Pre-call guard; throws `BudgetExceededError` at cap. |
