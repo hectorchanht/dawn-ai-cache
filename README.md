@@ -68,6 +68,7 @@ WebCrypto SHA-256 hex — the primitive behind cache keys and input hashes.
 | `prepareCachedStream(kv, parts, makeStream, opts?)` | HIT → `Response`; MISS → tee'd stream + `armPersistence`. Never throws on KV faults. |
 | `streamToPrimedResponse(stream, timeoutMs?)` | Waits for the first chunk (or failure) before returning the `Response`; replays the primed chunk so the body is complete. Provider failures surface as rejections — the caller returns a proper JSON error instead of a truncated stream. |
 | `streamToResponse(stream)` | Immediate streaming `Response` (no priming). |
+| `streamPost(url, body, onText, opts?)` | **Client-side.** POST JSON and stream the text back; `onText` gets the *cumulative* full text, throttled (default 80ms) so long responses don't O(n²) your markdown re-parse. Final call always delivers the complete text. Throws the server's `{ error }` on non-OK. |
 | `aiCacheKey(parts, prefix?)` | Stable cache key. |
 | `teeTextStream(inner)` | Fan-out wrapper; inner gets exactly one text listener. |
 | `checkBudget(kv, opts?, now?)` | Pre-call guard; throws `BudgetExceededError` at cap. |

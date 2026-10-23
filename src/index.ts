@@ -18,3 +18,5 @@ export {
 export type { BudgetKV, BudgetOptions } from "./budget.js";
 export { sha256hex } from "./hash.js";
 export { streamToResponse, streamToPrimedResponse } from "./stream.js";
+export { streamPost } from "./client.js";
+export type { StreamPostOptions } from "./client.js";
